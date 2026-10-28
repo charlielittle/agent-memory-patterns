@@ -13,6 +13,7 @@ DB_NAME = os.environ.get("AGENT_DB_NAME", "assistant_db")
 MEMORIES_COLLECTION = "memories"
 CONVERSATIONS_COLLECTION = "conversations"
 TASKS_COLLECTION = "task_results"
+QUERY_EMBEDDINGS_COLLECTION = "query_embeddings"
 
 VECTOR_INDEX_NAME = os.environ.get("VECTOR_INDEX_NAME", "vector_index")
 
@@ -33,6 +34,11 @@ W_FREQUENCY = 0.12
 W_UTILITY = 0.10
 
 DECAY_FACTOR = float(os.environ.get("DECAY_FACTOR", "0.99"))  # per hour
+STABILITY_HALF_LIFE_DAYS = {
+    "stable": float(os.environ.get("AGENT_STABLE_HALF_LIFE_DAYS", "365")),
+    "ongoing": float(os.environ.get("AGENT_ONGOING_HALF_LIFE_DAYS", "30")),
+    "transient": float(os.environ.get("AGENT_TRANSIENT_HALF_LIFE_DAYS", "3")),
+}
 
 VECTOR_SEARCH_TOP_K = int(os.environ.get("AGENT_VECTOR_SEARCH_TOP_K", "20"))
 RECALL_AT_K = int(os.environ.get("AGENT_RECALL_AT_K", "5"))

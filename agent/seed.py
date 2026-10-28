@@ -8,8 +8,11 @@ from .memory import CONVERSATION, EPISODIC
 
 TOPICS = [
     ("coffee", "User prefers a flat white with oat milk from Ritual Coffee."),
+    ("coffee", "User switched to decaf after 3pm."),
     ("travel", "User flies out of SFO and always books an aisle seat."),
+    ("travel", "User prefers window seats on overnight flights."),
     ("work", "User leads the platform team and runs sprint planning on Mondays."),
+    ("work", "User prefers async updates over daily standups."),
     ("health", "User runs 5k three mornings a week before work."),
     ("family", "User's sister Maya has a birthday on March 14."),
     ("food", "User is allergic to shellfish and avoids cilantro."),
@@ -17,6 +20,8 @@ TOPICS = [
     ("music", "User listens to lo-fi jazz while coding in the evening."),
     ("devops", "User deploys the assistant to Atlas cluster 'personal-ai'."),
     ("reading", "User is reading a book on distributed systems design."),
+    ("home", "User likes to keep the kitchen lights on a warm white setting."),
+    ("pets", "User's dog Theo prefers a morning walk before breakfast."),
 ]
 
 EPISODES = [

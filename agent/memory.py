@@ -102,7 +102,18 @@ class MemoryStore:
             (_now() - _as_utc(memory.get("last_accessed_at"))).total_seconds() / 3600.0,
             0.0,
         )
-        recency = math.pow(config.DECAY_FACTOR, hours_passed)
+        memory_tags = memory.get("tags", [])
+        stability_tags = [
+            tag for tag in config.STABILITY_HALF_LIFE_DAYS if tag in memory_tags
+        ]
+        stability = stability_tags[0] if len(stability_tags) == 1 else None
+        half_life_days = (
+            config.STABILITY_HALF_LIFE_DAYS[stability] if stability else None
+        )
+        if half_life_days is not None:
+            recency = math.pow(0.5, hours_passed / (half_life_days * 24))
+        else:
+            recency = math.pow(config.DECAY_FACTOR, hours_passed)
 
         use_count = max(int(memory.get("use_count", 1)), 1)
         frequency = (
@@ -131,6 +142,8 @@ class MemoryStore:
             memory["score_trace"] = {
                 "components": components,
                 "hours_since_access": hours_passed,
+                "stability": stability,
+                "half_life_days": half_life_days,
                 "use_count": use_count,
                 "max_frequency": max_frequency,
                 "success_count": successes,
@@ -157,6 +170,9 @@ class MemoryStore:
     ) -> list[dict]:
         """Fetch episodic + conversation candidates, re-rank, and reinforce."""
         query_vector = embeddings.embed(query, input_type="query")
+        db.query_embeddings().insert_one(
+            {"query": query, "embedding": query_vector, "created_at": _now()}
+        )
         match = {"kind": {"$in": kinds}} if kinds else None
         candidates = db.vector_candidates(query_vector, limit, match)
         candidates = [

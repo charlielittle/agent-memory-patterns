@@ -15,6 +15,10 @@ from .memory import MemoryStore
 def _print_score_trace(label: str, memory: dict) -> None:
     trace = memory["score_trace"]
     print(f"\n{label}: {memory.get('text', '')}")
+    stability = trace.get("stability") or "uncategorized"
+    half_life_days = trace.get("half_life_days")
+    decay = f"half-life={half_life_days:g} days" if half_life_days else "legacy hourly decay"
+    print(f"  stability  = {stability} ({decay})")
     for name, component in trace["components"].items():
         print(
             f"  {name:10} {component['weight']:.2f} × "
@@ -59,11 +63,13 @@ def _cmd_ask(args: argparse.Namespace) -> int:
     if args.show_memories and response.memories:
         print("\nRetrieved memories:")
         for memory in response.memories:
+            tags = ", ".join(memory.get("tags", [])) or "none"
             print(
                 f"  [{memory.get('kind')}] score={memory['composite_score']:.3f} "
                 f"relevance={float(memory.get('score', 0)):.3f} "
                 f"importance={float(memory.get('importance', 5)):.2f} "
-                f"uses={int(memory.get('use_count', 1))} :: {memory.get('text', '')}"
+                f"uses={int(memory.get('use_count', 1))} tags={tags} :: "
+                f"{memory.get('text', '')}"
             )
     if args.feedback:
         agent.give_feedback(response, success=args.feedback == "good")

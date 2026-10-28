@@ -13,9 +13,11 @@ from bson import ObjectId
 from . import config
 from .memory import CONVERSATION, EPISODIC, MemoryStore
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_VERSION = os.environ.get("ANTHROPIC_VERSION", "2023-06-01")
+ANTHROPIC_MAX_TOKENS = int(os.environ.get("ANTHROPIC_MAX_TOKENS", "800"))
 
 SUCCESS_THRESHOLD = float(os.environ.get("SUCCESS_THRESHOLD", "0.45"))
 
@@ -87,13 +89,13 @@ class PersonalAgent:
     def _answer(self, query: str, memories: list[dict]) -> str:
         context = self._format_context(memories)
         history = self.memory.recent_turns(limit=6)
-        if OPENAI_API_KEY:
+        if ANTHROPIC_API_KEY:
             llm_answer = self._llm_answer(query, context, history)
             if llm_answer:
                 return llm_answer
         else:
             logger.warning(
-                "OPENAI_API_KEY is unavailable; using extractive answer fallback"
+                "ANTHROPIC_API_KEY is unavailable; using extractive answer fallback"
             )
         return self._extractive_answer(query, memories)
 
@@ -108,48 +110,64 @@ class PersonalAgent:
 
     def _llm_answer(self, query: str, context: str, history: list[dict]) -> str | None:
         logger.info(
-            "Calling OpenAI chat completions model=%s history_turns=%d",
-            OPENAI_MODEL,
+            "Calling Anthropic messages model=%s history_turns=%d",
+            ANTHROPIC_MODEL,
             len(history),
         )
+        system = (
+            "You are a personal assistant. Answer using the retrieved "
+            "memories when they are relevant; say so when they are not.\n"
+            f"Retrieved memories:\n{context}"
+        )
         messages: list[dict[str, Any]] = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a personal assistant. Answer using the retrieved "
-                    "memories when they are relevant; say so when they are not.\n"
-                    f"Retrieved memories:\n{context}"
-                ),
-            }
-        ]
-        messages += [
-            {"role": turn["role"], "content": turn["text"]} for turn in history
+            {"role": turn["role"], "content": turn["text"]}
+            for turn in history
+            if turn.get("role") in {"user", "assistant"}
         ]
         messages.append({"role": "user", "content": query})
 
         request = urllib.request.Request(
-            OPENAI_URL,
+            ANTHROPIC_URL,
             data=json.dumps(
-                {"model": OPENAI_MODEL, "messages": messages, "temperature": 0.2}
+                {
+                    "model": ANTHROPIC_MODEL,
+                    "max_tokens": ANTHROPIC_MAX_TOKENS,
+                    "system": system,
+                    "messages": messages,
+                }
             ).encode(),
             headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": ANTHROPIC_VERSION,
                 "Content-Type": "application/json",
             },
         )
         try:
             with urllib.request.urlopen(request, timeout=45) as response:
                 body = json.loads(response.read())
-            logger.info("OpenAI chat completion succeeded model=%s", OPENAI_MODEL)
-            return body["choices"][0]["message"]["content"].strip()
+            logger.info("Anthropic message succeeded model=%s", ANTHROPIC_MODEL)
+            text = "\n".join(
+                block["text"]
+                for block in body.get("content", [])
+                if block.get("type") == "text" and block.get("text")
+            )
+            return text.strip() or None
+        except urllib.error.HTTPError as error:
+            details = error.read().decode(errors="replace")
+            logger.warning(
+                "Anthropic message failed; using extractive answer fallback: "
+                "status=%s details=%s",
+                error.code,
+                details,
+            )
+            return None
         except (
             urllib.error.URLError,
-            urllib.error.HTTPError,
             KeyError,
             TimeoutError,
         ) as error:
             logger.warning(
-                "OpenAI chat completion failed; using extractive answer fallback: %s",
+                "Anthropic message failed; using extractive answer fallback: %s",
                 error,
             )
             return None

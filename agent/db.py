@@ -13,6 +13,8 @@ from . import config
 
 _client: MongoClient | None = None
 logger = logging.getLogger(__name__)
+_VECTOR_LOG_LABEL = "<vector>"
+_VECTOR_LOG_KEYS = {"embedding", "queryvector"}
 
 
 def get_client() -> MongoClient:
@@ -31,20 +33,43 @@ def get_client() -> MongoClient:
     return _client
 
 
+def _redact_vectors(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _VECTOR_LOG_LABEL
+            if str(key).lower() in _VECTOR_LOG_KEYS
+            else _redact_vectors(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_vectors(item) for item in value]
+    return value
+
+
 def log_aggregation(collection: Collection, pipeline: list[dict[str, Any]]) -> None:
     logger.info(
         "Mongo aggregate collection=%s command=%s",
         collection.full_name,
-        {"aggregate": collection.name, "pipeline": pipeline, "cursor": {}},
+        _redact_vectors(
+            {"aggregate": collection.name, "pipeline": pipeline, "cursor": {}}
+        ),
     )
 
 
 def log_insert_one(collection: Collection, document: dict[str, Any]) -> None:
-    logger.info("Mongo insert_one collection=%s document=%s", collection.full_name, document)
+    logger.info(
+        "Mongo insert_one collection=%s document=%s",
+        collection.full_name,
+        _redact_vectors(document),
+    )
 
 
 def log_insert_many(collection: Collection, documents: list[dict[str, Any]]) -> None:
-    logger.info("Mongo insert_many collection=%s documents=%s", collection.full_name, documents)
+    logger.info(
+        "Mongo insert_many collection=%s documents=%s",
+        collection.full_name,
+        _redact_vectors(documents),
+    )
 
 
 def log_update_many(
@@ -53,8 +78,8 @@ def log_update_many(
     logger.info(
         "Mongo update_many collection=%s filter=%s update=%s",
         collection.full_name,
-        query_filter,
-        update,
+        _redact_vectors(query_filter),
+        _redact_vectors(update),
     )
 
 
@@ -74,11 +99,16 @@ def task_results() -> Collection:
     return get_db()[config.TASKS_COLLECTION]
 
 
+def query_embeddings() -> Collection:
+    return get_db()[config.QUERY_EMBEDDINGS_COLLECTION]
+
+
 def ensure_indexes() -> None:
     memories().create_index([("kind", ASCENDING), ("last_accessed_at", ASCENDING)])
     memories().create_index([("session_id", ASCENDING)])
     conversations().create_index([("session_id", ASCENDING), ("turn", ASCENDING)])
     task_results().create_index([("created_at", ASCENDING)])
+    query_embeddings().create_index([("created_at", ASCENDING)])
 
 
 def _cosine(a: np.ndarray, b: np.ndarray) -> float:
